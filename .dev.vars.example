@@ -1,0 +1,4 @@
+# Copy to .dev.vars for `wrangler dev`. In production these are `wrangler secret put` values.
+TWILIO_AUTH_TOKEN=replace-me
+FORWARD_TO=+15555550100
+ADMIN_TOKEN=choose-a-long-random-string
