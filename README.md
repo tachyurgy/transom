@@ -11,15 +11,16 @@ Transom is the small window above a door. It lets light through and stays out of
 
 ### 1. A Twilio voice line, answered by the Worker
 
-Twilio POSTs every call event to the Worker. The Worker verifies `X-Twilio-Signature` (HMAC-SHA1 over URL + sorted params, constant-time compare, WebCrypto, no SDK), writes the call to KV, and answers with TwiML.
+Twilio POSTs every call event to the Worker. The Worker verifies `X-Twilio-Signature` (HMAC-SHA1 over URL + sorted params, constant-time compare, WebCrypto, no SDK), writes the call to a SQLite-backed Durable Object, and answers with TwiML.
 
 | Webhook | What happens |
 |---|---|
 | `POST /voice/incoming` | greeting, `<Gather>` a single digit; re-prompts once, then hangs up |
+| `POST /voice/again` | back to the menu mid-call, without repeating the greeting |
 | `POST /voice/menu` | `1` explains the build in speech · `2` voicemail · `3` `<Dial>` a person, voicemail if busy/no answer |
 | `POST /voice/voicemail` | `<Record>` up to 120s, `#` to finish, transcription requested |
 | `POST /voice/recorded` | thanks and hangs up; the recording URL and duration land in the log |
-| `POST /voice/recording-status`, `/voice/transcription`, `/voice/status` | async callbacks that enrich the same log record via a `sid:<CallSid>` pointer |
+| `POST /voice/recording-status`, `/voice/transcription`, `/voice/status` | async callbacks that merge into the same record by CallSid |
 | `POST /voice/fallback` | Twilio only calls this if the primary URL failed; a polite exit, logged with the error code |
 | `POST /sms/incoming` | logs a text and replies |
 
@@ -30,12 +31,12 @@ Every handler returns 403 to anything Twilio did not sign. `scripts/simulate-cal
 The same Worker on a second route (`plumbline-edge.levelbrook.com/*`) proxies `https://plumbline.levelbrook.com` (Next.js, Vercel) and adds, in order:
 
 1. **Rate limiting** per client IP with the Workers Rate Limiting binding (120 req/min) → `429` + `Retry-After`
-2. **Maintenance switch** held in KV, flipped with `POST`/`DELETE /__edge/maintenance` under a bearer token → `503` page, origin never contacted
+2. **Maintenance switch** held in KV (the one thing KV is for here), flipped with `POST`/`DELETE /__edge/maintenance` under a bearer token → `503` page, origin never contacted
 3. **Edge cache** for anonymous GETs via the Cache API, honouring the origin's `no-store`/`private` → `x-edge-cache: HIT | MISS | BYPASS`
 4. **Origin fetch** with `x-forwarded-host`, `x-forwarded-proto`, `x-request-id`, `x-edge-client-ip`; hop-by-hop headers dropped
 5. **Response shaping**: `x-powered-by`, `server`, `x-vercel-*` stripped; HSTS, `nosniff`, frame and referrer policies added; `x-edge: transom` and the request id echoed
 6. **HTMLRewriter** appends a small status bar to every HTML document so a human can see the layer is there
-7. **Sampled log** (one KV row per HTML document, never per asset) feeding the dashboard
+7. **Sampled log** (one row per HTML document, never per asset) feeding the dashboard
 
 `GET /__edge/health` reports origin, colo, and the maintenance state.
 
@@ -46,11 +47,11 @@ src/index.ts      hostname + path router
 src/twilio.ts     signature verification + TwiML builder
 src/voice.ts      the IVR
 src/edge.ts       the proxy
-src/log.ts        KV call/edge log (inverted-timestamp keys list newest first)
+src/log.ts        CallLog Durable Object: SQLite tables for calls + edge rows, migrations applied on first touch
 src/dashboard.ts  server-rendered dashboard + /api/calls, /api/edge
-test/             vitest: Twilio's documented signature vector, TwiML escaping, header rewriting, key ordering
+test/             vitest: Twilio's documented signature vector, TwiML escaping, header rewriting, masking
 scripts/          provision-number.sh, simulate-call.sh
-wrangler.toml     routes, KV, rate limit binding, vars
+wrangler.toml     routes, KV, Durable Object + migration, rate limit binding, vars
 ```
 
 ## Deploy from nothing
@@ -73,6 +74,7 @@ TWILIO_AUTH_TOKEN=... ./scripts/simulate-call.sh https://transom.levelbrook.com
 
 - **The request URL Twilio signs must be the URL the Worker sees.** Behind Cloudflare routes it is; behind some proxies you would have to reconstruct it from `x-forwarded-*` before hashing.
 - **Async callbacks arrive out of order** (`status: completed` can land before `transcription`). The log is keyed by CallSid so each callback merges into the same record.
+- **KV was the first store and it lost a keypress.** A call's webhooks arrive seconds apart from different Twilio hosts; KV is eventually consistent and the menu callback could not see the record the incoming callback had just written. A single SQLite-backed Durable Object fixed it: strongly consistent, real SQL, and the traffic is trivial. KV stayed only for the maintenance flag, where a 60-second lag is harmless.
 - **`<Dial>` with an `action` is what makes forwarding safe:** busy/no-answer/failed all fall through to voicemail instead of dropping the caller.
 - **The Rate Limiting binding counts per Cloudflare machine, not globally.** Fine for abuse control; for strict global quotas use a Durable Object.
 - **Cache API is per colo.** A second colo sees a MISS. Acceptable for a read-mostly origin; use `cf.cacheEverything` or a KV-backed cache if you need it global.

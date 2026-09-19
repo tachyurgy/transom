@@ -10,7 +10,7 @@
 //   * /__edge/health and /__edge/maintenance operator endpoints, plus a sampled request log for the dashboard
 
 import type { Env } from "./env";
-import { logEdge } from "./log";
+import { callLog } from "./log";
 
 const MAINT_KEY = "edge:maintenance";
 const HOP_BY_HOP = ["connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade", "proxy-authorization", "proxy-authenticate"];
@@ -120,7 +120,7 @@ export async function handleEdge(request: Request, env: Env, ctx: ExecutionConte
       .on("body", { element(el) { el.append(banner(requestId, cacheState, cf.colo ?? "?"), { html: true }); } })
       .transform(res);
     // Sample the log: one row per HTML document, never per asset.
-    ctx.waitUntil(logEdge(env.LOG, { id: requestId, at: new Date(t0).toISOString(), method: request.method, path: url.pathname, status: res.status, cache: cacheState, ms: Date.now() - t0, colo: cf.colo, country: cf.country }));
+    ctx.waitUntil(callLog(env).logEdge({ id: requestId, at: new Date(t0).toISOString(), method: request.method, path: url.pathname, status: res.status, cache: cacheState, ms: Date.now() - t0, colo: cf.colo, country: cf.country }));
   }
   return res;
 }

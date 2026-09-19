@@ -6,6 +6,8 @@ import { handleVoice, handleSms } from "./voice";
 import { handleEdge } from "./edge";
 import { renderDashboard, apiCalls, apiEdge } from "./dashboard";
 
+export { CallLog } from "./log";
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);

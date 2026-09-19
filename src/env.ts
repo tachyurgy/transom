@@ -1,5 +1,8 @@
+import type { CallLog } from "./log";
+
 export interface Env {
-  LOG: KVNamespace;
+  LOG: KVNamespace;                          // maintenance flag only
+  CALL_LOG: DurableObjectNamespace<CallLog>; // call + edge logs (strongly consistent)
   EDGE_RL: { limit(opts: { key: string }): Promise<{ success: boolean }> };
   SITE_HOST: string;
   EDGE_HOST: string;

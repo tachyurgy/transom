@@ -1,13 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { callKey, maskNumber } from "../src/log";
-
-describe("log keys", () => {
-  it("sort newest first under KV's ascending list order", () => {
-    const older = callKey(1_700_000_000_000, "CA1");
-    const newer = callKey(1_700_000_001_000, "CA2");
-    expect([older, newer].sort()[0]).toBe(newer);
-  });
-});
+import { maskNumber } from "../src/log";
 
 describe("maskNumber", () => {
   it("keeps area code and last four of a NANP number", () => {

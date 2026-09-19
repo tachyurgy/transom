@@ -17,10 +17,20 @@ EDGE_HOST     = "plumbline-edge.levelbrook.com"
 ORIGIN        = "https://plumbline.levelbrook.com"
 TWILIO_NUMBER = "+12069844716"
 
-# Call log + edge request log + the maintenance flag. Created with `wrangler kv namespace create LOG`.
+# The maintenance flag (read on every edge request; eventual consistency is fine for a switch).
+# Created with `wrangler kv namespace create LOG`.
 [[kv_namespaces]]
 binding = "LOG"
 id = "394cfebfbe58422d9d2cbbf3d1f8ec7e"
+
+# Call log + edge log: one SQLite-backed Durable Object, strongly consistent across a call's webhooks.
+[[durable_objects.bindings]]
+name = "CALL_LOG"
+class_name = "CallLog"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["CallLog"]
 
 # Per-client-IP rate limit on the edge hostname (Workers Rate Limiting binding).
 [[ratelimits]]

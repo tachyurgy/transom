@@ -2,7 +2,7 @@
 // framework, so what you see is exactly what the Worker knows.
 
 import type { Env } from "./env";
-import { listCalls, listEdge, maskNumber, type CallRecord } from "./log";
+import { callLog, maskNumber, type CallRecord } from "./log";
 import { esc } from "./twilio";
 
 const fmtNumber = (n: string) => n.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "+1 ($1) $2-$3");
@@ -20,7 +20,8 @@ function callRow(c: CallRecord): string {
 }
 
 export async function renderDashboard(env: Env): Promise<Response> {
-  const [calls, edge] = await Promise.all([listCalls(env.LOG, 25), listEdge(env.LOG, 15)]);
+  const log = callLog(env);
+  const [calls, edge] = await Promise.all([log.listCalls(25), log.listEdge(15)]);
   const maint = (await env.LOG.get("edge:maintenance")) === "1";
   const html = `<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
 <title>Transom — a Twilio voice line and an edge layer, both on one Cloudflare Worker</title>
@@ -92,11 +93,11 @@ scripts/          provision-number.sh (buys + wires a number), simulate-call.sh 
 }
 
 export async function apiCalls(env: Env): Promise<Response> {
-  const calls = await listCalls(env.LOG, 50);
-  const safe = calls.map(({ key: _k, from, recordingUrl: _r, ...rest }) => ({ ...rest, from: maskNumber(from) }));
+  const calls = await callLog(env).listCalls(50);
+  const safe = calls.map(({ from, recordingUrl: _r, ...rest }) => ({ ...rest, from: maskNumber(from) }));
   return new Response(JSON.stringify(safe, null, 2), { headers: { "content-type": "application/json", "cache-control": "no-store" } });
 }
 
 export async function apiEdge(env: Env): Promise<Response> {
-  return new Response(JSON.stringify(await listEdge(env.LOG, 50), null, 2), { headers: { "content-type": "application/json", "cache-control": "no-store" } });
+  return new Response(JSON.stringify(await callLog(env).listEdge(50), null, 2), { headers: { "content-type": "application/json", "cache-control": "no-store" } });
 }
