@@ -59,6 +59,10 @@ export class CallLog extends DurableObject<Env> {
     return rec;
   }
 
+  deleteCall(sid: string): boolean {
+    return this.ctx.storage.sql.exec(`DELETE FROM calls WHERE sid = ?`, sid).rowsWritten > 0;
+  }
+
   listCalls(limit = 25): CallRecord[] {
     return this.ctx.storage.sql.exec<{ record: string }>(`SELECT record FROM calls ORDER BY started_at DESC LIMIT ?`, limit).toArray().map((r) => JSON.parse(r.record) as CallRecord);
   }
